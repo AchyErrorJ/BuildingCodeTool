@@ -6,24 +6,46 @@ An ultra-portable, zero-install MCP (Model Context Protocol) server for Revit th
 
 - **Zero Installation**: Single executable file (~2.5MB), no Python/Node.js dependencies required
 - **Revit Integration**: Connects directly to Revit via MCP protocol
-- **IFC-Based Analysis**: Extracts building facts from IFC exports
+- **IFC-Based Analysis**: Production IFC parsing using ifcopenshell library
 - **Deterministic Evaluation**: Code-based rule evaluation (no LLM hallucination)
 - **Part 9 Focus**: Residential building code checks (stairs, guards, egress, etc.)
 - **Citation-Backed Results**: Every compliance claim references specific OBC articles
 - **Cross-Platform**: Windows, Mac (Intel & Apple Silicon), Linux support
+- **Portable Bundle**: Executable + ifc_extractor.py script in same folder
+
+## Architecture
+
+The tool uses a hybrid approach:
+1. **Go Binary**: Handles MCP protocol, rule evaluation, and result formatting
+2. **Python Script** (`ifc_extractor.py`): Parses IFC files using ifcopenshell to extract building facts
+3. **Rule Engine**: Deterministic predicate-based OBC compliance checking
+
+When an IFC file exists, the Go binary calls the Python extractor. When no file is found (demo mode), it uses built-in sample data.
 
 ## Quick Start
 
 ### For Students
 
-1. Download the executable for your OS:
-   - **Windows**: `revitmcp-server.exe`
-   - **Mac (Intel)**: `revitmcp-server-macos-amd64`
-   - **Mac (Apple Silicon M1/M2/M3)**: `revitmcp-server-macos-arm64`
-   - **Linux**: `revitmcp-server-linux`
-2. Place in any folder (e.g., `C:\Tools\revitmcp-server.exe`)
-3. Configure your MCP client (see configuration section below)
-4. Run code checks directly from Revit!
+1. Download the distribution folder containing:
+   - `revitmcp-server-[platform]` (executable)
+   - `ifc_extractor.py` (IFC parser script)
+   
+2. Place both files in any folder (e.g., `C:\Tools\`)
+3. Ensure Python 3 with ifcopenshell is available:
+   ```bash
+   pip install ifcopenshell
+   ```
+4. Configure your MCP client (see configuration section below)
+5. Run code checks directly from Revit!
+
+### Testing Without Revit
+
+Run standalone demo mode to see sample output:
+```bash
+./revitmcp-server-linux --mode standalone
+```
+
+This shows how the tool extracts building facts and evaluates OBC compliance.
 
 ### Configuration
 
