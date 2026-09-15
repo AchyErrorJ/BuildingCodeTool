@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -523,32 +524,182 @@ func handleGetApplicableRules(id int, args map[string]interface{}) {
 	sendResponse(response)
 }
 
-func simulateFactExtraction(ifcPath string) BuildingFacts {
-	// In real implementation, this would parse the IFC file
-	// For demo purposes, return sample data
-	return BuildingFacts{
-		Guards: []GuardFact{
-			{Location: "exterior_deck", HeightMM: 1067, DropMM: 2400, IsExterior: true},
-			{Location: "interior_loft", HeightMM: 900, DropMM: 2700, IsExterior: false},
-			{Location: "front_porch", HeightMM: 850, DropMM: 750, IsExterior: true},
-		},
-		Stairs: []StairFact{
-			{RiserMM: 180, TreadMM: 280, WidthMM: 900, FlightCount: 1},
-			{RiserMM: 210, TreadMM: 200, WidthMM: 860, FlightCount: 2},
-		},
-		Rooms: []RoomFact{
-			{Name: "Bedroom 1", AreaM2: 12.5, Occupancy: "residential"},
-			{Name: "Bedroom 2", AreaM2: 10.2, Occupancy: "residential"},
-			{Name: "Living Room", AreaM2: 25.0, Occupancy: "residential"},
-		},
-		Doors: []DoorFact{
-			{Location: "main_exit", WidthMM: 900, HeightMM: 2000, SwingClearMM: 850, IsEgress: true},
-			{Location: "bedroom_1", WidthMM: 810, HeightMM: 1980, SwingClearMM: 760, IsEgress: false},
-		},
-		Corridors: []CorridorFact{
-			{Location: "upper_hall", WidthMM: 920, LengthMM: 4500},
-		},
+func extractFactsFromIFC(ifcPath string) BuildingFacts {
+	// Call the Python IFC extractor script
+	scriptPath := "ifc_extractor.py"
+	
+	// Try to find the script in the same directory as the executable
+	execPath, err := os.Executable()
+	if err == nil {
+		scriptDir := ""
+		for i := len(execPath) - 1; i >= 0 && execPath[i] != '/' && execPath[i] != '\\'; i-- {
+			scriptDir = execPath[:i]
+		}
+		if scriptDir != "" {
+			scriptPath = scriptDir + string(os.PathSeparator) + "ifc_extractor.py"
+		}
 	}
+	
+	// Run the Python script
+	cmd := exec.Command("python3", scriptPath, ifcPath)
+	output, err := cmd.Output()
+	if err != nil {
+		// If extraction fails, return empty facts with error logged
+		fmt.Fprintf(os.Stderr, "Warning: IFC extraction failed: %v\n", err)
+		return BuildingFacts{}
+	}
+	
+	// Parse JSON output
+	var factsData map[string]interface{}
+	if err := json.Unmarshal(output, &factsData); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to parse IFC extraction output: %v\n", err)
+		return BuildingFacts{}
+	}
+	
+	// Convert to BuildingFacts structure
+	facts := BuildingFacts{}
+	
+	// Extract guards
+	if guardsData, ok := factsData["guards"].([]interface{}); ok {
+		for _, g := range guardsData {
+			if gm, ok := g.(map[string]interface{}); ok {
+				guard := GuardFact{}
+				if loc, ok := gm["location"].(string); ok {
+					guard.Location = loc
+				}
+				if h, ok := gm["height_mm"].(float64); ok {
+					guard.HeightMM = int(h)
+				}
+				if d, ok := gm["drop_mm"].(float64); ok {
+					guard.DropMM = int(d)
+				}
+				if ext, ok := gm["is_exterior"].(bool); ok {
+					guard.IsExterior = ext
+				}
+				facts.Guards = append(facts.Guards, guard)
+			}
+		}
+	}
+	
+	// Extract stairs
+	if stairsData, ok := factsData["stairs"].([]interface{}); ok {
+		for _, s := range stairsData {
+			if sm, ok := s.(map[string]interface{}); ok {
+				stair := StairFact{}
+				if r, ok := sm["riser_mm"].(float64); ok {
+					stair.RiserMM = int(r)
+				}
+				if t, ok := sm["tread_mm"].(float64); ok {
+					stair.TreadMM = int(t)
+				}
+				if w, ok := sm["width_mm"].(float64); ok {
+					stair.WidthMM = int(w)
+				}
+				if f, ok := sm["flight_count"].(float64); ok {
+					stair.FlightCount = int(f)
+				}
+				facts.Stairs = append(facts.Stairs, stair)
+			}
+		}
+	}
+	
+	// Extract rooms
+	if roomsData, ok := factsData["rooms"].([]interface{}); ok {
+		for _, r := range roomsData {
+			if rm, ok := r.(map[string]interface{}); ok {
+				room := RoomFact{}
+				if n, ok := rm["name"].(string); ok {
+					room.Name = n
+				}
+				if a, ok := rm["area_m2"].(float64); ok {
+					room.AreaM2 = a
+				}
+				if o, ok := rm["occupancy"].(string); ok {
+					room.Occupancy = o
+				}
+				facts.Rooms = append(facts.Rooms, room)
+			}
+		}
+	}
+	
+	// Extract doors
+	if doorsData, ok := factsData["doors"].([]interface{}); ok {
+		for _, d := range doorsData {
+			if dm, ok := d.(map[string]interface{}); ok {
+				door := DoorFact{}
+				if loc, ok := dm["location"].(string); ok {
+					door.Location = loc
+				}
+				if w, ok := dm["width_mm"].(float64); ok {
+					door.WidthMM = int(w)
+				}
+				if h, ok := dm["height_mm"].(float64); ok {
+					door.HeightMM = int(h)
+				}
+				if s, ok := dm["swing_clear_mm"].(float64); ok {
+					door.SwingClearMM = int(s)
+				}
+				if e, ok := dm["is_egress"].(bool); ok {
+					door.IsEgress = e
+				}
+				facts.Doors = append(facts.Doors, door)
+			}
+		}
+	}
+	
+	// Extract corridors
+	if corridorsData, ok := factsData["corridors"].([]interface{}); ok {
+		for _, c := range corridorsData {
+			if cm, ok := c.(map[string]interface{}); ok {
+				corridor := CorridorFact{}
+				if loc, ok := cm["location"].(string); ok {
+					corridor.Location = loc
+				}
+				if w, ok := cm["width_mm"].(float64); ok {
+					corridor.WidthMM = int(w)
+				}
+				if l, ok := cm["length_mm"].(float64); ok {
+					corridor.LengthMM = int(l)
+				}
+				facts.Corridors = append(facts.Corridors, corridor)
+			}
+		}
+	}
+	
+	return facts
+}
+
+func simulateFactExtraction(ifcPath string) BuildingFacts {
+	// Check if IFC file exists
+	if _, err := os.Stat(ifcPath); os.IsNotExist(err) {
+		// File doesn't exist, use demo data for standalone mode
+		return BuildingFacts{
+			Guards: []GuardFact{
+				{Location: "exterior_deck", HeightMM: 1067, DropMM: 2400, IsExterior: true},
+				{Location: "interior_loft", HeightMM: 900, DropMM: 2700, IsExterior: false},
+				{Location: "front_porch", HeightMM: 850, DropMM: 750, IsExterior: true},
+			},
+			Stairs: []StairFact{
+				{RiserMM: 180, TreadMM: 280, WidthMM: 900, FlightCount: 1},
+				{RiserMM: 210, TreadMM: 200, WidthMM: 860, FlightCount: 2},
+			},
+			Rooms: []RoomFact{
+				{Name: "Bedroom 1", AreaM2: 12.5, Occupancy: "residential"},
+				{Name: "Bedroom 2", AreaM2: 10.2, Occupancy: "residential"},
+				{Name: "Living Room", AreaM2: 25.0, Occupancy: "residential"},
+			},
+			Doors: []DoorFact{
+				{Location: "main_exit", WidthMM: 900, HeightMM: 2000, SwingClearMM: 850, IsEgress: true},
+				{Location: "bedroom_1", WidthMM: 810, HeightMM: 1980, SwingClearMM: 760, IsEgress: false},
+			},
+			Corridors: []CorridorFact{
+				{Location: "upper_hall", WidthMM: 920, LengthMM: 4500},
+			},
+		}
+	}
+	
+	// IFC file exists, use production extractor
+	return extractFactsFromIFC(ifcPath)
 }
 
 func evaluateRules(facts BuildingFacts, partFilters []string) CheckResult {
