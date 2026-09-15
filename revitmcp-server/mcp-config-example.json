@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "obc-checker": {
+      "command": "C:\\path\\to\\revitmcp-server.exe",
+      "args": ["--mode", "server"]
+    }
+  }
+}
