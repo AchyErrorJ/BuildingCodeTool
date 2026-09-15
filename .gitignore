@@ -1,0 +1,14 @@
+```
+# Binaries
+*.exe
+*.dll
+*.so
+*.out
+
+# Build artifacts
+revitmcp-server/revitmcp-server
+revitmcp-server/revitmcp-server-linux
+revitmcp-server/revitmcp-server-macos-amd64
+revitmcp-server/revitmcp-server-macos-arm64
+revitmcp-server/revitmcp-server.exe
+```
